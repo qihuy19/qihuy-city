@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Qihuy City — an open-world crime game</title>
+<style>
+  :root {
+    --ink: #fff6e8;
+    --muted: #d8c9ae;
+    --accent: #ffb13d;
+    --danger: #ff5040;
+    --panel: rgba(16, 18, 28, 0.72);
+    --line: rgba(255, 255, 255, 0.16);
+    --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-readout: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1420; color: var(--ink); font-family: var(--font-ui); }
+  #game, #game canvas { position: fixed; inset: 0; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(3px); }
+
+  #top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 4px; color: #8a8fa3; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #stars.hot { color: var(--accent); animation: pulse 0.7s infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
+  #cash { font-family: var(--font-readout); font-size: 26px; font-weight: 700; color: #7dff8a; text-shadow: 0 2px 6px rgba(0,0,0,.6); margin-top: 2px; }
+  #health-wrap, #stamina-wrap, #damage-wrap { margin-top: 8px; width: 190px; margin-left: auto; }
+  #stamina-wrap, #damage-wrap { display: none; }
+  #health-bar, #stamina-bar, #damage-bar { height: 10px; border-radius: 5px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7dff8a); transition: width .2s; }
+  #stamina-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2a9fd8, #7dd8ff); transition: width .2s; }
+  #damage-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffb13d, #ff5040); transition: width .2s; }
+  #health-text, #damage-text { font-family: var(--font-readout); font-size: 12px; color: var(--muted); margin-top: 3px; }
+  #damage-text { color: #ffb13d; }
+  #weapon, #radio, #weather { font-family: var(--font-readout); font-size: 13px; color: var(--ink); margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #radio { color: var(--accent); }
+  #weather { color: #9fc8ff; }
+  #fare { display: none; font-family: var(--font-readout); font-size: 13px; color: #ffe95e; margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #clock { font-family: var(--font-readout); font-size: 13px; color: var(--muted); margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #insight { display: none; font-family: var(--font-readout); font-size: 12px; font-weight: 700; color: #ffb13d; margin-top: 4px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #insight.sight-hot { color: var(--danger); animation: pulse 0.5s infinite alternate; }
+  #radio-track { display: none; font-family: var(--font-readout); font-size: 12px; color: #ff9ecf; margin-top: 3px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #weapons { display: flex; gap: 5px; margin-top: 8px; justify-content: flex-end; }
+  .wslot { min-width: 52px; padding: 4px 6px; text-align: center; background: rgba(0,0,0,.5); border: 1px solid var(--line); border-radius: 6px; }
+  .wslot.active { border-color: var(--accent); background: rgba(255,177,61,.18); }
+  .wslot.locked { opacity: .45; }
+  .wslot .wkey { display: block; font-size: 10px; color: var(--muted); font-family: var(--font-readout); }
+  .wslot .wname { display: block; font-size: 11px; font-weight: 700; }
+  .wslot .wammo { display: block; font-size: 10px; color: #7dff8a; font-family: var(--font-readout); }
+
+  #stage-text { font-family: var(--font-readout); font-size: 12px; color: var(--muted); margin-top: 6px; }
+  #stage-bar { height: 6px; border-radius: 3px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; margin-top: 3px; }
+  #stage-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd94f, #ff9a2a); }
+  #next-line { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+
+  #response { display: none; position: absolute; top: 168px; left: 16px; padding: 10px 12px; width: 300px; }
+  #response-title { font-family: var(--font-readout); font-size: 12px; font-weight: 700; color: #7db8ff; letter-spacing: .5px; }
+  #response-list { margin-top: 6px; }
+  #response-list .unit { display: flex; gap: 8px; font-family: var(--font-readout); font-size: 12px; padding: 2px 0; }
+  #response-list .unit-name { color: var(--ink); flex: 1; }
+  #response-list .unit-dist { color: var(--muted); }
+  #response-list .unit-state { font-weight: 700; color: #ffd94f; background: rgba(255,217,79,.15); padding: 0 6px; border-radius: 4px; }
+  #response-list .unit-state.ram { color: #ff6a5a; background: rgba(255,80,64,.2); }
+
+  #dialogue { display: none; position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); max-width: 620px; width: max-content;
+    align-items: center; gap: 12px; padding: 10px 16px 10px 10px; }
+  #dialogue-avatar { width: 44px; height: 44px; flex: none; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 900; color: #1a1206; background: linear-gradient(180deg, #ffd94f, #ff7a3d); }
+  #dialogue-name { font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  #dialogue-text { font-size: 14.5px; line-height: 1.4; }
+
+  /* Visual-novel briefing: a full-screen letterbox scene — big painted
+     portrait, nameplate, dialogue line, progress — before a story job. */
+  #briefing { display: none; position: fixed; inset: 0; z-index: 20; align-items: flex-end; justify-content: center;
+    background: linear-gradient(180deg, rgba(26,10,30,.35) 0%, rgba(20,12,34,.55) 55%, rgba(20,12,34,.88) 100%);
+    pointer-events: auto; cursor: pointer; }
+  #briefing-card { width: min(760px, 92vw); margin-bottom: 9vh; display: flex; gap: 18px; align-items: flex-end;
+    background: rgba(14, 14, 24, 0.88); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  #briefing-portrait { flex: none; width: 148px; height: 148px; border-radius: 12px; overflow: hidden; position: relative;
+    background: linear-gradient(180deg, #3a2a55, #1a1420); border: 1px solid var(--line); }
+  #briefing-portrait svg { display: block; width: 100%; height: 100%; }
+  #briefing-avatar { position: absolute; right: 8px; bottom: 8px; width: 34px; height: 34px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 900; color: #1a1206; background: linear-gradient(180deg, #ffd94f, #ff7a3d); }
+  #briefing-body { flex: 1; min-width: 0; }
+  #briefing-name { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: 2px; }
+  #briefing-role { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-top: 2px; }
+  #briefing-text { font-size: 17px; line-height: 1.55; margin-top: 10px; min-height: 52px; }
+  #briefing-progress { font-family: var(--font-readout); font-size: 12px; color: var(--muted); margin-top: 10px; }
+  #btn-briefing-next { margin-top: 12px; }
+  #search-line { display: none; font-family: var(--font-readout); font-size: 11px; color: #ff8a7a; margin-top: 4px; text-align: center; }
+  #garage-line { font-size: 10px; letter-spacing: 1.5px; color: #4fd2ff; text-align: center; margin-top: 2px; font-family: var(--font-readout); }
+
+  /* v5 stats screen: the lifetime numbers on the pause menu. */
+  #stats-panel { margin: 16px 0 4px; padding: 12px 16px; text-align: left; }
+  #stats-panel h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 2px; color: var(--accent); }
+  #stats-panel .stat-row { display: flex; justify-content: space-between; font-family: var(--font-readout); font-size: 13px; padding: 3px 0; color: var(--muted); }
+  #stats-panel .stat-row span:last-child { color: var(--ink); font-weight: 700; }
+
+  #speed-car { font-family: var(--font-readout); font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: 1px; }
+  #speed-cond { height: 6px; border-radius: 3px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; }
+  #speed-cond-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7dff8a); }
+  #speed-cond-text { font-family: var(--font-readout); font-size: 11px; color: var(--muted); margin-top: 3px; }
+  #district-label { font-size: 11px; letter-spacing: 2px; color: var(--accent); text-align: center; margin-top: 4px; font-weight: 700; }
+  #districts-line { font-size: 10px; letter-spacing: 1.5px; color: var(--muted); text-align: center; margin-top: 2px; font-family: var(--font-readout); }
+  #respect { margin-top: 6px; }
+  #respect-bar { height: 6px; border-radius: 3px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; }
+  #respect-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #2a9fd8, #7dd8ff); }
+  #respect-text { font-family: var(--font-readout); font-size: 11px; color: var(--muted); margin-top: 3px; text-align: center; }
+
+  #objective-box { position: absolute; top: 14px; left: 16px; padding: 10px 14px; max-width: 340px; }
+  #objective-title { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .4px; }
+  #objective { font-size: 14px; line-height: 1.45; margin-top: 4px; }
+  #mission-timer { font-family: var(--font-readout); font-size: 20px; font-weight: 700; color: var(--danger); margin-top: 6px; }
+
+  #minimap-wrap { position: absolute; left: 16px; bottom: 16px; padding: 6px; }
+  #minimap { display: block; width: 190px; height: 190px; border-radius: 50%; border: 2px solid var(--line); }
+  #minimap-label { font-size: 11px; letter-spacing: 2px; color: var(--muted); text-align: center; margin-top: 4px; }
+
+  #speed { position: absolute; right: 18px; bottom: 16px; text-align: right; display: none; }
+  #speed-value { font-family: var(--font-readout); font-size: 44px; font-weight: 800; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+  #speed-unit { font-size: 12px; color: var(--muted); letter-spacing: 2px; }
+
+  #message { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); max-width: 560px; text-align: center;
+    font-size: 18px; font-weight: 600; line-height: 1.5; padding: 10px 18px; opacity: 0; transition: opacity .3s;
+    text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 12.5px; color: var(--muted);
+    background: rgba(0,0,0,.45); padding: 6px 12px; border-radius: 20px; white-space: nowrap; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); display: none; }
+  #crosshair i { position: absolute; background: #fff; opacity: .9; box-shadow: 0 0 3px #000; }
+  #crosshair i:nth-child(1) { left: 10px; top: 0; width: 2px; height: 6px; }
+  #crosshair i:nth-child(2) { left: 10px; bottom: 0; width: 2px; height: 6px; }
+  #crosshair i:nth-child(3) { top: 10px; left: 0; height: 2px; width: 6px; }
+  #crosshair i:nth-child(4) { top: 10px; right: 0; height: 2px; width: 6px; }
+
+  /* v6: compass strip, drift meter, spike warning, damage direction,
+     dispatcher chatter and the district blurb. */
+  #compass { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 320px; height: 26px;
+    overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 13px; }
+  #compass-needle { position: absolute; inset: 0; }
+  #compass-needle span { position: absolute; top: 3px; transform: translateX(-50%); font-family: var(--font-readout);
+    font-size: 13px; font-weight: 700; color: var(--ink); }
+  #compass-target { position: absolute; top: 3px; transform: translateX(-50%); font-family: var(--font-readout);
+    font-size: 12px; font-weight: 700; color: #ffd94f; white-space: nowrap; }
+  #compass::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); opacity: .7; }
+  #drift-wrap { display: none; position: absolute; right: 18px; bottom: 118px; width: 220px; text-align: right; }
+  #drift-bar { height: 10px; border-radius: 5px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; }
+  #drift-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #2a9fd8, #7dd8ff); transition: width .15s; }
+  #drift-text { font-family: var(--font-readout); font-size: 12px; font-weight: 700; color: #7dd8ff; margin-top: 3px; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+  #spike-warning { display: none; position: absolute; left: 50%; top: 52px; transform: translateX(-50%);
+    font-family: var(--font-readout); font-size: 13px; font-weight: 700; color: var(--danger);
+    background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 16px; border: 1px solid rgba(255,80,64,.5);
+    animation: pulse 0.5s infinite alternate; white-space: nowrap; }
+  #damage-dir { display: none; position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; margin: -60px 0 0 -60px;
+    pointer-events: none; }
+  #damage-dir::before { content: ''; position: absolute; left: 50%; top: -8px; transform: translateX(-50%);
+    border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 20px solid rgba(255,80,64,.9); }
+  #chatter-line { display: none; position: absolute; top: 330px; left: 16px; padding: 8px 12px; max-width: 300px;
+    font-family: var(--font-readout); font-size: 12px; color: #ffd94f; }
+  #district-blurb { font-size: 11px; color: var(--muted); text-align: center; margin-top: 2px; font-style: italic; }
+  #mission-log { margin-top: 10px; text-align: left; max-height: 130px; overflow-y: auto; }
+  #mission-log .log-row { display: flex; justify-content: space-between; font-family: var(--font-readout); font-size: 12px;
+    padding: 3px 0; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.06); }
+  #mission-log .log-row span:last-child { color: #7dff8a; font-weight: 700; }
+  #mission-log h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: 2px; color: var(--accent); }
+  #side-jobs { margin-top: 12px; }
+  #side-jobs h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 2px; color: var(--accent); }
+
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10;
+    background: linear-gradient(180deg, rgba(26,10,30,.55) 0%, rgba(20,12,34,.82) 100%); }
+  .screen-card { max-width: 640px; margin: 20px; padding: 34px 40px; text-align: center;
+    background: rgba(14, 14, 24, 0.82); border: 1px solid var(--line); border-radius: 16px; }
+  .screen-card h1 { margin: 0; font-size: 52px; letter-spacing: 4px; font-weight: 900;
+    background: linear-gradient(180deg, #ffe9a0, #ff7a3d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .screen-card h2 { margin: 0 0 8px; font-size: 34px; letter-spacing: 2px; }
+  .screen-card .tagline { color: var(--accent); letter-spacing: 3px; font-size: 13px; text-transform: uppercase; margin-top: 6px; }
+  .screen-card p { color: var(--muted); line-height: 1.6; font-size: 15px; }
+  .screen-card .story { text-align: left; font-size: 14.5px; }
+  .screen-card .story b { color: var(--ink); }
+  .controls { text-align: left; font-size: 13.5px; line-height: 1.9; color: var(--muted); columns: 2; column-gap: 28px; margin: 14px 0; }
+  .controls b { color: var(--ink); font-family: var(--font-readout); }
+  .btn { pointer-events: auto; display: inline-block; margin: 6px 4px 0; padding: 12px 26px; font-size: 16px; font-weight: 700;
+    font-family: var(--font-ui); color: #1a1206; background: linear-gradient(180deg, #ffd94f, #ff9a2a); border: none;
+    border-radius: 10px; cursor: pointer; letter-spacing: .5px; }
+  .btn:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: .45; cursor: default; filter: none; }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .fine { font-size: 12px; color: #8a8fa3; margin-top: 16px; }
+  #title-screen { display: flex; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="Qihuy City: an open-world crime game. Drive, steal cars, run missions and lose the cops."></canvas>
+
+<div id="hud">
+  <div id="objective-box" class="panel">
+    <div id="objective-title">Mission 1 — Hot Wheels</div>
+    <div id="objective">Steal a car and bring it to the garage.</div>
+    <div id="mission-timer"></div>
+    <div id="stage-text">STAGE 1/2</div>
+    <div id="stage-bar"><div id="stage-bar-fill"></div></div>
+    <div id="next-line">NEXT Drive to the garage marker</div>
+  </div>
+  <div id="response" class="panel">
+    <div id="response-title">QCPD RESPONSE</div>
+    <div id="response-list"></div>
+  </div>
+  <div id="chatter-line" class="panel"></div>
+  <div id="traffic-line" class="panel"></div>
+  <div id="mode-line" class="panel"></div>
+  <div id="heli-line" class="panel"></div>
+  <div id="boat-line" class="panel"></div>
+  <div id="compass"><div id="compass-needle"></div><div id="compass-target"></div></div>
+  <div id="spike-warning"></div>
+  <div id="damage-dir"></div>
+  <div id="drift-wrap">
+    <div id="drift-bar"><div id="drift-fill"></div></div>
+    <div id="drift-text">DRIFT +0</div>
+  </div>
+  <div id="top-right">
+    <div id="clock">DAY 1 18:00</div>
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="insight"></div>
+    <div id="cash">$0</div>
+    <div id="weapons"></div>
+    <div id="health-wrap">
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <div id="health-text">100</div>
+    </div>
+    <div id="stamina-wrap">
+      <div id="stamina-bar"><div id="stamina-fill"></div></div>
+    </div>
+    <div id="damage-wrap">
+      <div id="damage-bar"><div id="damage-fill"></div></div>
+      <div id="damage-text"></div>
+    </div>
+    <div id="weapon">🔫 Pistol ∞</div>
+    <div id="radio">📻 Sunset FM — chill</div>
+    <div id="radio-track"></div>
+    <div id="weather">☀️ Clear</div>
+    <div id="fare"></div>
+  </div>
+  <div id="dialogue" class="panel">
+    <div id="dialogue-avatar">M</div>
+    <div>
+      <div id="dialogue-name">MARA — FIXER</div>
+      <div id="dialogue-text"></div>
+    </div>
+  </div>
+  <div id="minimap-wrap" class="panel">
+    <canvas id="minimap" width="190" height="190"></canvas>
+    <div id="district-label">SUNSET PLAZA</div>
+    <div id="district-blurb"></div>
+    <div id="districts-line">DISTRICTS 0/11 EXPLORED</div>
+    <div id="garage-line">🏠 GARAGE — $500 AT SAFEHOUSE</div>
+    <div id="search-line"></div>
+    <div id="respect">
+      <div id="respect-bar"><div id="respect-fill"></div></div>
+      <div id="respect-text">RESPECT 1 — 0 pts</div>
+    </div>
+  </div>
+  <div id="speed">
+    <div id="speed-car">COMPACT</div>
+    <div id="speed-line"><span id="speed-value">0</span><span id="speed-unit"> KM/H</span></div>
+    <div id="speed-cond"><div id="speed-cond-fill"></div></div>
+    <div id="speed-cond-text">CONDITION 100%</div>
+  </div>
+  <div id="message" class="panel"></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hint"></div>
+</div>
+
+<div id="briefing">
+  <div id="briefing-card">
+    <div id="briefing-portrait">
+      <svg viewBox="0 0 148 148" aria-hidden="true">
+        <defs>
+          <linearGradient id="bp-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#b84a8e" />
+            <stop offset="1" stop-color="#ff8a6a" />
+          </linearGradient>
+        </defs>
+        <rect width="148" height="148" fill="url(#bp-sky)" />
+        <circle cx="74" cy="52" r="34" fill="#2a1a2a" opacity="0.35" />
+        <circle cx="74" cy="46" r="46" fill="#ff8a6a" opacity="0.25" />
+        <!-- Stylised portrait: hair, face, shoulders — painted in SVG, no image file. -->
+        <path d="M34 78 Q34 18 74 18 Q114 18 114 78 L110 96 Q100 62 74 62 Q48 62 38 96 Z" fill="#241a20" />
+        <ellipse cx="74" cy="72" rx="26" ry="30" fill="#e8b88a" />
+        <path d="M48 66 Q52 40 74 40 Q96 40 100 66 Q96 52 74 52 Q52 52 48 66 Z" fill="#241a20" />
+        <circle cx="63" cy="72" r="3.4" fill="#1a1206" />
+        <circle cx="85" cy="72" r="3.4" fill="#1a1206" />
+        <path d="M66 88 Q74 93 82 88" stroke="#8a4a3a" stroke-width="2.4" fill="none" stroke-linecap="round" />
+        <path d="M30 148 Q40 108 74 108 Q108 108 118 148 Z" fill="#3a2a55" />
+        <path d="M30 148 Q40 108 74 108 Q108 108 118 148 Z" fill="none" stroke="#ffd94f" stroke-width="1.5" opacity="0.5" />
+        <circle cx="74" cy="126" r="5" fill="#ffd94f" />
+      </svg>
+      <div id="briefing-avatar">M</div>
+    </div>
+    <div id="briefing-body">
+      <div id="briefing-name">MARA</div>
+      <div id="briefing-role">FIXER</div>
+      <div id="briefing-text"></div>
+      <div id="briefing-progress"></div>
+      <button id="btn-briefing-next" class="btn">Continue ▸</button>
+    </div>
+  </div>
+</div>
+
+<div id="title-screen" class="screen">
+  <div class="screen-card">
+    <h1>QIHUY CITY</h1>
+    <div class="tagline">An open-world crime story · Sunset Coast</div>
+    <p class="story"><b>Riko Vale</b> is back in Qihuy City — nine roads of sun, sea and
+    bad decisions, across eleven districts: the glass towers downtown, the
+    quiet houses of the suburb, the boardwalk with its ferris wheel, the
+    container port, colourful Old Town, the marina, Market Row, the ferry
+    terminal and its lighthouse, the casino strip, and the
+    airport with its runway and hangars. The fixer <b>Mara</b> has twenty-four jobs for him: steal the wheels, run the
+    package, lift the harbor cash, and twenty-one more — fares, raids, a hospital run,
+    a taxi shift, an ambulance run, a port delivery, a neon run through two
+    districts, a five-star airport heist on a motorbike, a casino-strip job,
+    a ferry-terminal run, a market hustle, a sunset finale,
+    and one last getaway with two helicopters overhead — and then a choice: Mara's garage or
+    Dara's casino, with three more jobs on the side he picks. Between jobs, tune the car at
+    the parts shop, walk into the corner store, the Golden Palm and the safehouse, and mind the
+    traffic — rush hour is thick, roadworks narrow the lanes, and pedestrians dart across the road.
+    Or skip the story: a vigilante shift or a taxi career runs straight from this screen. Steal cars, dodge the patrols, mind the weather — rain
+    makes the roads slick and fog blinds the cops — and don't let the wanted stars catch up with you.</p>
+    <div class="controls">
+      <div><b>WASD</b> — move / drive</div>
+      <div><b>Mouse drag</b> — look around</div>
+      <div><b>Shift</b> — sprint (stamina)</div>
+      <div><b>Space</b> — jump / handbrake</div>
+      <div><b>E</b> — enter car / pick up / shop / garage</div>
+      <div><b>F</b> — punch &nbsp; <b>Click</b> — shoot</div>
+      <div><b>X</b> — dodge roll &nbsp; <b>Right mouse</b> — aim</div>
+      <div><b>1–4</b> — fists / pistol / shotgun / SMG</div>
+      <div><b>R</b> — radio station &nbsp; <b>N</b> — night</div>
+      <div><b>V</b> — weather &nbsp; <b>L</b> — headlights</div>
+      <div><b>G</b> — repair at garage &nbsp; <b>H</b> — horn</div>
+      <div><b>C</b> — chase camera &nbsp; <b>Q</b> — police roster</div>
+      <div><b>P</b> — stats &nbsp; <b>M</b> — mute &nbsp; <b>Esc</b> — pause &amp; save</div>
+    </div>
+    <button id="btn-start" class="btn">▶ &nbsp;New Game</button>
+    <button id="btn-continue" class="btn ghost">Continue</button>
+    <button id="btn-mode-vigilante" class="btn ghost">🚨 Vigilante Shift</button>
+    <button id="btn-mode-taxi" class="btn ghost">🚕 Taxi Career</button>
+    <button id="btn-mute" class="btn ghost">🔊 Sound: On</button>
+    <p class="fine">A fully original game — its city, people, cars and story are invented here.
+    Progress saves in this browser. Sound starts after your first click.</p>
+  </div>
+</div>
+
+<div id="pause-screen" class="screen">
+  <div class="screen-card">
+    <h2>PAUSED</h2>
+    <p>Take a breath, Riko. The city waits. Your progress is saved.</p>
+    <div id="stats-panel" class="panel">
+      <h3>RIKO'S RECORD</h3>
+      <div class="stat-row"><span>Missions</span><span id="stats-missions">0 / 20 missions done</span></div>
+      <div class="stat-row"><span>Cash stashes</span><span id="stats-stashes">0 / 24 stashes found</span></div>
+      <div class="stat-row"><span>Cars stolen</span><span id="stats-cars">0 cars stolen</span></div>
+      <div class="stat-row"><span>Best wanted</span><span id="stats-wanted">☆☆☆☆☆ best wanted 0/5</span></div>
+      <div class="stat-row"><span>Play time</span><span id="stats-time">0m 00s played</span></div>
+      <div class="stat-row"><span>Safehouse garage</span><span id="stats-garage">Garage not bought yet ($500 at the safehouse)</span></div>
+    </div>
+    <div id="mission-log" class="panel">
+      <h4>MISSION LOG</h4>
+      <div class="log-row"><span>No jobs done yet — Mara is waiting.</span></div>
+    </div>
+    <div id="side-jobs">
+      <h4>SIDE JOBS — EARN BETWEEN STORY JOBS</h4>
+      <button id="btn-side-courier" class="btn ghost">📦 Courier Run</button>
+      <button id="btn-side-wheelman" class="btn ghost">🚗 Wheelman</button>
+      <button id="btn-side-lookout" class="btn ghost">👀 Lookout</button>
+    </div>
+    <button id="btn-resume" class="btn">Resume</button>
+    <button id="btn-restart-mission" class="btn ghost">Restart Mission</button>
+    <button id="btn-quit-title" class="btn ghost">Save &amp; Quit to Title</button>
+  </div>
+</div>
+
+<div id="busted-screen" class="screen">
+  <div class="screen-card">
+    <h2>🚨 BUSTED</h2>
+    <p>The Qihuy City patrols caught up with you. They took a fine and dropped you at City Hospital.</p>
+    <button id="btn-busted-ok" class="btn">Back on the Street</button>
+  </div>
+</div>
+
+<div id="wasted-screen" class="screen">
+  <div class="screen-card">
+    <h2>💀 WASTED</h2>
+    <p>Riko went down hard. The medics patched him up at City Hospital — for a price.</p>
+    <button id="btn-wasted-ok" class="btn">Back on the Street</button>
+  </div>
+</div>
+
+<div id="shop-screen" class="screen">
+  <div class="screen-card">
+    <h2 id="shop-title">🛒 CORNER STORE</h2>
+    <p id="shop-blurb">Guns, ammo, a patch-up and a repair — the plaza shop has what a wheelman needs.</p>
+    <p id="shop-cash">Cash: $0</p>
+    <p id="shop-health">Health: 100</p>
+    <div id="shop-weapons">
+      <button id="buy-health" class="btn">Full Heal — $50</button>
+      <button id="buy-shotgun" class="btn">Shotgun — $150</button>
+      <button id="buy-smg" class="btn">SMG — $250</button>
+      <button id="buy-shotgun-ammo" class="btn ghost">12 Shells — $40</button>
+      <button id="buy-smg-ammo" class="btn ghost">60 Rounds — $60</button>
+      <button id="buy-repair" class="btn ghost">Repair Car — $60</button>
+    </div>
+    <div id="shop-parts">
+      <button id="buy-engine" class="btn">🔧 Engine — $300</button>
+      <button id="buy-armor" class="btn">🛡️ Armour — $250</button>
+      <button id="buy-tires" class="btn">🛞 Tyres — $200</button>
+      <button id="buy-garage-slot" class="btn ghost">🏠 Extra Garage Slot — $800</button>
+    </div>
+    <div id="shop-ledger" class="panel"></div>
+    <br>
+    <button id="btn-shop-close" class="btn ghost">Leave Store</button>
+    <p class="fine">Shotgun: press 3. SMG: press 4. The pistol never runs dry. A wrecked car can also be fixed at Mara's garage — drive in and press G. The safehouse garage (H marker, $500) stores up to 3 stolen cars — press E there to buy it, park, or take a car out. The parts shop (W marker, port road) fits engines, armour and tyres, and sells extra garage slots up to 5 cars. Walk into the store, the casino or the safehouse with E at the door — the casino's slots pay $50 or $200, and the safehouse bed sleeps till the other half of the day.</p>
+  </div>
+</div>
+
+<div id="complete-screen" class="screen">
+  <div class="screen-card">
+    <h2>🏆 STORY COMPLETE</h2>
+    <p>Twenty-four jobs, one clean getaway. Mara is happy, the Rimba crew is furious, and
+    Qihuy City is yours. Twenty-four cash stashes are still hidden around town — go find them.</p>
+    <button id="btn-complete-ok" class="btn">Free Roam</button>
+  </div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
